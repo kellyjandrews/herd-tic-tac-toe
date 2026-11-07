@@ -1,0 +1,63 @@
+name: Feature queue
+
+on:
+  issues:
+    types: [opened, labeled, closed, assigned]
+  # Runs started by Copilot need approval, so ship starts from PAT or Vercel events and polls.
+  issue_comment:
+    types: [created, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    if: github.event_name == 'issues' && github.event.action != 'closed' && contains(github.event.issue.labels.*.name, 'feature-batch')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: feature-batch-${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: node .github/scripts/feature-queue.mjs import
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+  next:
+    needs: import
+    if: >-
+      always() && (needs.import.result == 'success' || github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'feature-queue') ||
+      (github.event.action == 'closed' && contains(github.event.issue.labels.*.name, 'feature-queue')))
+    runs-on: ubuntu-latest
+    concurrency:
+      group: feature-queue
+    steps:
+      - uses: actions/checkout@v4
+      - run: node .github/scripts/feature-queue.mjs next
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          REPO: ${{ github.repository }}
+          PAUSED: ${{ vars.FEATURE_QUEUE_PAUSED }}
+
+  # Waits for Copilot, marks the PR ready, runs CI without approval, and merges on green.
+  ship:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && github.event.action == 'assigned' && contains(github.event.assignee.login, 'copilot')) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login == 'vercel[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: feature-ship
+    steps:
+      # Default-branch code only; never check out the pull request.
+      - uses: actions/checkout@v4
+      - run: node .github/scripts/feature-queue.mjs ship
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          REPO: ${{ github.repository }}
+          AUTO_MERGE: ${{ vars.FEATURE_AUTO_MERGE }}
+          SHIP_WAIT_MINUTES: ${{ vars.SHIP_WAIT_MINUTES }}

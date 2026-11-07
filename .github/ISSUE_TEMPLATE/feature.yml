@@ -1,0 +1,24 @@
+name: Feature request
+description: Describe one small feature to be implemented by the remote coding agent.
+title: "[Feature]: "
+labels: [feature]
+body:
+  - type: textarea
+    id: user-value
+    attributes:
+      label: What should the user be able to do?
+      placeholder: "As a <user>, I can <action> so that <benefit>."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Include observable behavior and any edge cases.
+      placeholder: "Given ..., when ..., then ..."
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints or out of scope
